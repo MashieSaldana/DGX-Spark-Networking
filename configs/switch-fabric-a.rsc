@@ -1,4 +1,4 @@
-# Asteria Fabric A — CRS504-4XQ (serial HK80AWF1R39) — reconstructed 2026-09-30
+# Asteria Fabric A — CRS504-4XQ — reconstructed 2026-09-30
 # via RouterOS API reads (not /export), networking sections only.
 # Differences vs Fabric B: data-port L3 mtu 1584 (l2mtu 9014; L3 mtu is
 # irrelevant on this pure-L2 bridge), trust-l3=keep, pcp=0, PFC thresholds
@@ -6,7 +6,7 @@
 # PCP classes + 9000 mtu + 90/70 thresholds); A is functionally equivalent.
 # RouterOS 7.24.4 (stable), board fw 7.24.4
 /interface bridge
-add admin-mac=04:F4:1C:9F:C1:B2 auto-mac=no comment=defconf name=bridge
+add admin-mac=xx:xx:xx:xx:xx:xx auto-mac=no comment=defconf name=bridge
 add name=bridge-roce
 /interface ethernet
 set [ find default-name=qsfp28-1-1 ] l2mtu=9014
