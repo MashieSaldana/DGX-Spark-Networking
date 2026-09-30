@@ -1,0 +1,15 @@
+network:
+  version: 2
+  ethernets:
+    enp1s0f0np0:
+      dhcp4: no
+      dhcp6: no
+      link-local: []
+      mtu: 9000
+      addresses: [10.0.0.1/24]
+    enP2p1s0f1np1:
+      dhcp4: no
+      dhcp6: no
+      link-local: []
+      mtu: 9000
+      addresses: [10.0.1.1/24]
