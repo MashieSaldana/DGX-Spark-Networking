@@ -13,29 +13,25 @@ taken from the live devices on 2026-09-30, not from memory.
 
 ```
                   Ubiquiti LAN 192.168.1.0/24 (mgmt)
-                           │ ether1 (bridge, mgmt IP .10)
-                    ┌──────┴──────┐
-                    │ CRS504-4XQ  │  "Asteria Fabric B" (serial HGZ0AEFTV0M)
-                    │ RouterOS 7  │  bridge-roce = qsfp28-1-1 .. qsfp28-4-1
-                    │ 98DX4310    │  L2MTU 9014, QoS hw-offload, lossless
-                    └───┬───┬───┬───┘
-              qsfp28-1   │   │   │   qsfp28-4
-                   ┌─────┘   │   └─────┐
-                metis     pallas   vesta   ceres
-              192.168.10.5  .4      .3      .2
-              enP2p1s0f1np1 enP2p1s0f1np1 enP2p1s0f1np1 enP2p1s0f1np1   (10.0.1.x)
-              + each node's enp1s0f0np0 (10.0.0.x) on a second fabric
+                           │
+       ┌───────────────────┴───────────────────┐
+       │                                       │
+ ┌─────┴─────┐                           ┌─────┴─────┐
+ │ CRS504-4XQ│  "Asteria Fabric A"        │ CRS504-4XQ│  "Asteria Fabric B"
+ │ serial    │  192.168.1.9               │ serial    │  192.168.1.10
+ │ HK80AWF1R39 (original)                │ HGZ0AEFTV0M (replacement)
+ │ bridge-roce = qsfp28-{1..4}-1          │ bridge-roce = qsfp28-{1..4}-1
+ └─┬────┬────┬────┬─┘                     └─┬────┬────┬────┬─┘
+   │    │    │    │                          │    │    │    │
+  metis pallas vesta ceres                  metis pallas vesta ceres
+   (10.0.0.4 .3  .2  .1)                     (10.0.1.4 .3  .2  .1)
+   each enp1s0f0np0                          each enP2p1s0f1np1
 ```
 
 Each DGX Spark has TWO ConnectX-7 100G ports wired (one per PCIe root
-complex), giving 2×100G per node of dual-fabric capacity. The Primary
-fabric (this document's focus) is the CRS504 switch "Asteria Fabric B".
-
-Note: our nodes' second CX7 link (enp1s0f0np0, 10.0.0.x) is also up at
-100G — on this site it connects to a second CRS504 ("Fabric A", mgmt
-192.168.1.9) over which we no longer hold credentials. For a single-switch
-build (the common case), skip the second link or leave it unconfigured;
-the config below is complete for one switch.
+complex), and BOTH are live: every node reaches every node over 2×100G
+dual fabric, one hop through either switch. Both switches run identical
+bridge/QoS logic; the only differences are cosmetic-ish (see §3.5).
 
 ## 2. Addressing plan
 
@@ -46,14 +42,14 @@ the config below is complete for one switch.
 | pallas| 192.168.10.4/24      | 10.0.0.3/24   | 10.0.1.3/24   | enp1s0f0np0  (10.0.0.3)| enP2p1s0f1np1 (10.0.1.3)|
 | metis | 192.168.10.5/24      | 10.0.0.4/24   | 10.0.1.4/24   | enp1s0f0np0  (10.0.0.4)| enP2p1s0f1np1 (10.0.1.4)|
 
-Switch-side mapping on Fabric B (learned MACs → port):
+Switch-side mapping (LEARNED MACs → port, both switches identical):
 
-| switch port | host  | node MAC on that port (f1)      |
-|-------------|-------|---------------------------------|
-| qsfp28-1-1  | metis | 4C:BB:47:7E:8C:54               |
-| qsfp28-2-1  | pallas| 4C:BB:47:29:A9:0E               |
-| qsfp28-3-1  | vesta | 4C:BB:47:81:75:38               |
-| qsfp28-4-1  | ceres | 4C:BB:47:81:A8:05               |
+| switch port | host  | MAC on Fabric A (f0 link)    | MAC on Fabric B (f1 link)    |
+|-------------|-------|------------------------------|------------------------------|
+| qsfp28-1-1  | metis | 4C:BB:47:7E:8C:4F            | 4C:BB:47:7E:8C:54            |
+| qsfp28-2-1  | pallas| 4C:BB:47:29:A9:09            | 4C:BB:47:29:A9:0E            |
+| qsfp28-3-1  | vesta | 4C:BB:47:81:75:33            | 4C:BB:47:81:75:38            |
+| qsfp28-4-1  | ceres | 4C:BB:47:81:A8:00            | 4C:BB:47:81:A8:05            |
 
 All ports link at 100 Gbps, IB rate 100 Gb/s (4X EDR), state ACTIVE.
 RoCE subnet via the CX7 ports only — no dedicated SM needed for this size
@@ -132,7 +128,26 @@ i.e.:
 /system identity set name="Asteria Fabric B"      # ours; pick your own
 ```
 
-### 3.5 Applying to a fresh unit
+### 3.5 Applying to a fresh unit + the two live units' differences
+Our two units (A: serial HK80AWF1R39 @ 192.168.1.9 — the original; B:
+HGZ0AEFTV0M @ 192.168.1.10 — the later unit) are wired identically and
+forward identically. B is the canonical config in this repo
+(`configs/switch-fabric-b.rsc` is a verbatim RouterOS export). A differs
+only in these details (full file in `configs/switch-fabric-a.rsc`, built
+from live API reads):
+
+| knob                     | Fabric A (.9)           | Fabric B (.10)            | impact |
+|--------------------------|-------------------------|---------------------------|--------|
+| data-port L3 MTU         | 1584 (l2mtu 9014)       | 9000 (l2mtu 9014)         | none — pure L2 bridge, no routed frames |
+| QoS port trust           | keep                    | trust (L3)                | none — hosts set DSCP 26 themselves; both honor the map |
+| profile PCP marking      | pcp=0 (roce/cnp)        | pcp=3/6 (roce-lossless/cnp)| egress 802.1p PCP bits differ; hosts trust DSCP |
+| PFC thresholds           | auto                    | 90%/70%                   | auto is fine at this scale |
+| qos-hw-offloading        | switch1=on, switch2=off| switch1=on                | same data path (all 100G ports on switch1) |
+
+Level detail: all QSFP28 (100G) ports live on switch1; ether1/mgmt and
+the mgmt bridge live on switch2 — only switch1 needs qos-hw-offloading.
+
+### 3.6 Applying to a fresh unit
 1. Reset to RouterOS (not SwOS), set admin password, enable SSH.
 2. Copy `configs/switch-fabric-b.rsc`, edit the mgmt IP block to your LAN.
 3. `ssh admin@<ip> "/import file-name=switch-fabric-b.rsc"` (scp the file
@@ -258,10 +273,11 @@ ssh vesta 'ib_write_bw -d roceP2p1s0f1 --duration=15 --report_gbits 10.0.1.1'
 
 ## 7. Files
 
-- `configs/switch-fabric-b.rsc` — full RouterOS export, verbatim
+- `configs/switch-fabric-b.rsc` — full RouterOS export, verbatim (canonical)
+- `configs/switch-fabric-a.rsc` — Fabric A's live config (API reads), slight deltas
 - `configs/netplan-40-cx7.yaml` — netplan snippet (ceres addresses)
 - `configs/99-roce-unused.conf` — NetworkManager unmanaged list
 - `configs/roce-qos.service` / `configs/roce-qos.sh` — QoS systemd unit+script
 
 All host configs are byte-identical across the 4 nodes except the /24
-address octet.
+address octet. Switch mgmt: admin / your LAN password on BOTH units.
