@@ -1,11 +1,10 @@
-# Asteria — 4× DGX Spark 100G RoCE Fabric (as-built)
+# Asteria — 4x DGX Spark 100G RoCE Fabric (as-built)
 
 Complete, verified configuration of the "Asteria" cluster: four NVIDIA DGX
 Spark hosts (GB10) connected through MikroTik CRS504-4XQ switches for
 lossless 100G RoCEv2 RDMA.
 
-Scope: switch settings + host settings + validation. Everything below was
-taken from the live devices on 2026-09-30, not from memory.
+Scope: switch settings + host settings + validation. 
 
 ---
 
@@ -14,18 +13,20 @@ taken from the live devices on 2026-09-30, not from memory.
 ```
                   Ubiquiti LAN 192.168.1.0/24 (mgmt)
                            │
-       ┌───────────────────┴───────────────────┐
-       │                                       │
- ┌─────┴─────┐                           ┌─────┴─────┐
- │ CRS504-4XQ│  "Asteria Fabric A"        │ CRS504-4XQ│  "Asteria Fabric B"
- │ serial    │  192.168.1.9               │ serial    │  192.168.1.10
- │ HK80AWF1R39 (original)                │ HGZ0AEFTV0M (replacement)
- │ bridge-roce = qsfp28-{1..4}-1          │ bridge-roce = qsfp28-{1..4}-1
- └─┬────┬────┬────┬─┘                     └─┬────┬────┬────┬─┘
-   │    │    │    │                          │    │    │    │
-  metis pallas vesta ceres                  metis pallas vesta ceres
-   (10.0.0.4 .3  .2  .1)                     (10.0.1.4 .3  .2  .1)
-   each enp1s0f0np0                          each enP2p1s0f1np1
+       ┌───────────────────┴────────────────────┐
+       │                                        │
+ ┌─────┴───────────────┐                  ┌─────┴───────────────┐
+ | "Asteria Fabric A"  |                  | "Asteria Fabric B"  |
+ │ CRS504-4XQ          │                  │ CRS504-4XQ          │  
+ │ 192.168.1.9         |                  │ 192.168.1.10        |
+ │                     │                  |                     |
+ │ bridge-roce =       |                  │ bridge-roce =       |
+ │ qsfp28-{1..4}-1     │                  | qsfp28-{1..4}-1     |
+ └─┬─────┬─────┬─────┬─┘                  └─┬─────┬─────┬─────┬─┘
+   │     │     │     │                      │     │     │     │
+  metis pallas vesta ceres                metis pallas vesta ceres
+ (10.0.0.4 .3    .2    .1)               (10.0.1.4 .3    .2    .1)
+  each enp1s0f0np0                        each enP2p1s0f1np1
 ```
 
 Each DGX Spark has TWO ConnectX-7 100G ports wired (one per PCIe root
@@ -68,7 +69,7 @@ The full export is in `configs/switch-fabric-b.rsc`; the essential parts:
 ### 3.1 Management bridge
 ```
 /interface bridge
-add admin-mac=F4:1E:57:2E:FC:61 auto-mac=no comment=defconf name=bridge
+add admin-mac=xx:xx:xx:xx:xx:xx auto-mac=no comment=defconf name=bridge
 add name=bridge-roce
 /interface bridge port            # ether1 in 'bridge'
 add bridge=bridge comment=defconf interface=ether1
@@ -129,8 +130,7 @@ i.e.:
 ```
 
 ### 3.5 Applying to a fresh unit + the two live units' differences
-Our two units (A: serial HK80AWF1R39 @ 192.168.1.9 — the original; B:
-HGZ0AEFTV0M @ 192.168.1.10 — the later unit) are wired identically and
+Our two units (A @ 192.168.1.9; B @ 192.168.1.10 are wired identically and
 forward identically. B is the canonical config in this repo
 (`configs/switch-fabric-b.rsc` is a verbatim RouterOS export). A differs
 only in these details (full file in `configs/switch-fabric-a.rsc`, built
@@ -268,8 +268,6 @@ ssh vesta 'ib_write_bw -d roceP2p1s0f1 --duration=15 --report_gbits 10.0.1.1'
    cable, unmanage the other, and note which is which (f0/f1 per RC).
 4. **Re-seed SSH known_hosts after re-IP** or sparkrun's delegated
    model-dist fails "Host key verification failed".
-5. Pallas driver drift (580.173.02 vs 580.178.04) — cosmetic; no impact
-   on networking.
 
 ## 7. Files
 
