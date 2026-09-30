@@ -2,9 +2,8 @@
 # software id = J87S-AHVQ
 #
 # model = CRS504-4XQ
-# serial number = HGZ0AEFTV0M
 /interface bridge
-add admin-mac=F4:1E:57:2E:FC:61 auto-mac=no comment=defconf name=bridge
+add admin-mac=xx:xx:xx:xx:xx:xx auto-mac=no comment=defconf name=bridge
 add name=bridge-roce
 /interface ethernet
 set [ find default-name=qsfp28-1-1 ] l2mtu=9014 mtu=9000
