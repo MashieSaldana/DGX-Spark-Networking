@@ -103,16 +103,16 @@ single-chip; the board as a whole is not.
 ### 3.3 Lossless RoCEv2 QoS (PFC + DSCP maps)
 ```
 /interface ethernet switch qos priority-flow-control
-add name=pfc-tc3 pause-threshold=90% resume-threshold=70% rx=yes \
+add name=pfc-tc3 pause-threshold=auto resume-threshold=auto rx=yes \
     traffic-class=3 tx=yes
 /interface ethernet switch qos port
-set qsfp28-1-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
-set qsfp28-2-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
-set qsfp28-3-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
-set qsfp28-4-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
+set qsfp28-1-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
+set qsfp28-2-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
+set qsfp28-3-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
+set qsfp28-4-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
 /interface ethernet switch qos profile
-add dscp=26 name=roce-lossless pcp=3 traffic-class=3
-add dscp=48 name=cnp pcp=6 traffic-class=6
+add dscp=26 name=roce-lossless traffic-class=3
+add dscp=48 name=cnp traffic-class=6
 /interface ethernet switch qos map ip
 add dscp=26 profile=roce-lossless
 add dscp=48 profile=cnp
@@ -120,7 +120,8 @@ add dscp=48 profile=cnp
 i.e.:
 - DSCP 26 (RoCEv2) → priority 3, traffic class 3, lossless (PFC enabled)
 - DSCP 48 (CNP / congestion notification packets) → priority 6, TC 6
-- PFC threshold 90%/70% so backpressure triggers before buffers overflow
+- PFC threshold auto (RouterOS picks from the buffer pool; fixed values such
+  as 90%/70% are a valid alternative but not required at this scale)
 
 ### 3.4 Misc
 ```
@@ -134,17 +135,18 @@ i.e.:
 
 ### 3.5 Applying to a fresh unit + the two live units' differences
 Our two units (A @ 192.168.1.9; B @ 192.168.1.10) are wired identically and
-forward identically. B is the canonical config in this repo
-(`configs/switch-fabric-b.rsc` is a verbatim RouterOS export). A differs
-only in these details (full file in `configs/switch-fabric-a.rsc`, built
-from live API reads):
+forward identically. B was originally the canonical explicit build
+(`configs/switch-fabric-b.rsc` is the pre-convergence export); A runs the
+minimal set. B has since been converged to the same minimal QoS (see
+§3.5.1). The only remaining difference is the L3 MTU, which is inert on this
+L2-only bridge:
 
 | knob                     | Fabric A (.9)           | Fabric B (.10)            | impact |
 |--------------------------|-------------------------|---------------------------|--------|
 | data-port L3 MTU         | 1584 (l2mtu 9014)       | 9000 (l2mtu 9014)         | none — pure L2 bridge, no routed frames |
-| QoS port trust           | keep                    | trust (L3)                | none — hosts set DSCP 26 themselves; both honor the map |
-| profile PCP marking      | pcp=0 (roce/cnp)        | pcp=3/6 (roce-lossless/cnp)| egress 802.1p PCP bits differ; hosts trust DSCP |
-| PFC thresholds           | auto                    | 90%/70%                   | auto is fine at this scale |
+| QoS port trust           | keep                    | keep                      | hosts set DSCP 26 themselves; both honor the map |
+| profile PCP marking      | pcp=0 (roce/cnp)        | pcp=0 (roce-lossless/cnp) | egress 802.1p PCP bits are irrelevant on untagged links |
+| PFC thresholds           | auto                    | auto                      | RouterOS picks from the buffer pool |
 | qos-hw-offloading        | switch1=on, switch2=off | switch1=on, switch2=off   | same data path (all 100G ports on switch1) |
 
 Both units are the same hardware and both expose two switch chips:
@@ -158,14 +160,15 @@ the export format differs.
 
 ### 3.5.1 Minimal Fabric B convergence
 
-Fabric A already runs the minimum load-bearing set: both DSCP/traffic-class
+Fabric B now runs the same minimal set as Fabric A: both DSCP/traffic-class
 profiles, `pfc-tc3`, `trust-l3=keep`, `egress-rate-queue3`, `l2mtu=9014`,
 and QoS offload on `switch1`; PFC thresholds and PCP marks are left at
-defaults. Fabric B will be reduced to the same set by the next down run:
+defaults. It was converged manually on 2026-11-04, and `asteria-down.sh`
+phase 4b re-asserts it after RouterOS updates:
 
-- PCP marking returns to 0 on both profiles (these links are untagged).
-- PFC pause/resume thresholds return to `auto`.
-- Data ports will use `trust-l3=keep` so the host's DSCP is preserved.
+- PCP marking is 0 on both profiles (these links are untagged).
+- PFC pause/resume thresholds are `auto`.
+- Data ports use `trust-l3=keep` so the host's DSCP is preserved.
 
 `configs/switch-fabric-b-minimal.rsc` is a targeted delta, not a full
 export. `asteria-down.sh` phase 4b imports it after sparkrun has stopped
@@ -298,9 +301,9 @@ ssh vesta 'ib_write_bw -d roceP2p1s0f1 --duration=15 --report_gbits 10.0.1.1'
 
 ## 7. Files
 
-- `configs/switch-fabric-b.rsc` — full RouterOS export, verbatim (canonical)
+- `configs/switch-fabric-b.rsc` — pre-convergence RouterOS export (historical)
 - `configs/switch-fabric-a.rsc` — Fabric A's live config (API reads), slight deltas
-- `configs/switch-fabric-b-minimal.rsc` — targeted minimal-QoS delta for Fabric B
+- `configs/switch-fabric-b-minimal.rsc` — minimal-QoS delta (now applied)
 - `configs/switch-fabric-b-rollback.rsc` — reverses the minimal-QoS delta
 - `configs/netplan-40-cx7.yaml` — netplan snippet (ceres addresses)
 - `configs/99-roce-unused.conf` — NetworkManager unmanaged list
