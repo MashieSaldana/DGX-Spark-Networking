@@ -1,4 +1,5 @@
 # 2026-09-24 13:32:13 by RouterOS 7.24.4
+# QoS minimized 2026-11-04: profile PCP=0, PFC thresholds auto, trust-l3=keep
 # software id = J87S-AHVQ
 #
 # model = CRS504-4XQ
@@ -27,16 +28,16 @@ set [ find default-name=qsfp28-4-3 ] advertise="10M-baseT-half,10M-baseT-full,\
     baseT,2.5G-baseX,5G-baseT,10G-baseT,10G-baseSR-LR,10G-baseCR,40G-baseSR4-L\
     R4,40G-baseCR4,25G-baseSR-LR,25G-baseCR,50G-baseSR2-LR2,50G-baseCR2"
 /interface ethernet switch qos priority-flow-control
-add name=pfc-tc3 pause-threshold=90% resume-threshold=70% rx=yes \
+add name=pfc-tc3 pause-threshold=auto resume-threshold=auto rx=yes \
     traffic-class=3 tx=yes
 /interface ethernet switch qos port
-set qsfp28-1-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
-set qsfp28-2-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
-set qsfp28-3-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
-set qsfp28-4-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=trust
+set qsfp28-1-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
+set qsfp28-2-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
+set qsfp28-3-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
+set qsfp28-4-1 egress-rate-queue3=100.0Gbps pfc=pfc-tc3 trust-l3=keep
 /interface ethernet switch qos profile
-add dscp=26 name=roce-lossless pcp=3 traffic-class=3
-add dscp=48 name=cnp pcp=6 traffic-class=6
+add dscp=26 name=roce-lossless traffic-class=3
+add dscp=48 name=cnp traffic-class=6
 /interface list
 add name=WAN
 add name=LAN

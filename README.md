@@ -64,7 +64,7 @@ Preamble: CRS504-4XQ is a 4×100G QSFP28 L2 switch with a Marvell Prestera
 (qsfp28-1-1) — you WILL lose management when you move that port. Re-bind
 mgmt IP to ether1/bridge (or a dedicated mgmt interface) FIRST.
 
-The historical full export is in `configs/switch-fabric-b.rsc`; the essential parts:
+The full export is in `configs/switch-fabric-b.rsc`; the essential parts:
 
 ### 3.1 Management bridge
 ```
@@ -135,50 +135,23 @@ i.e.:
 
 ### 3.5 Applying to a fresh unit + the two live units' differences
 Our two units (A @ 192.168.1.9; B @ 192.168.1.10) are wired identically and
-forward identically. Both now run the same minimal QoS set; B was originally
-the explicit build (`configs/switch-fabric-b.rsc` is the pre-convergence
-export), and A's L3 MTU was raised from 1584 to 9000 on 2026-11-04. There is
-no remaining configuration delta:
-
-| knob                     | Fabric A (.9)           | Fabric B (.10)            | impact |
-|--------------------------|-------------------------|---------------------------|--------|
-| data-port L3 MTU         | 9000 (l2mtu 9014)       | 9000 (l2mtu 9014)         | none — pure L2 bridge, no routed frames |
-| QoS port trust           | keep                    | keep                      | hosts set DSCP 26 themselves; both honor the map |
-| profile PCP marking      | pcp=0 (roce/cnp)        | pcp=0 (roce-lossless/cnp) | egress 802.1p PCP bits are irrelevant on untagged links |
-| PFC thresholds           | auto                    | auto                      | RouterOS picks from the buffer pool |
-| qos-hw-offloading        | switch1=on, switch2=off | switch1=on, switch2=off   | same data path (all 100G ports on switch1) |
-
-Only the profile names differ (`roce` vs `roce-lossless`); their dscp,
-traffic-class and PCP values are identical.
+forward identically. Both run the same minimal QoS set; only the profile
+names differ (`roce` vs `roce-lossless`), with identical dscp, traffic-class
+and PCP values.
 
 Both units are the same hardware and both expose two switch chips:
 `switch1` = Marvell 98DX4310 (all QSFP28 data ports) and `switch2` =
-Atheros 8227 (`ether1`/mgmt only). Fabric B's `.rsc` is a RouterOS
-`/export`, which omits default values, and `qos-hw-offloading=no` is the
-default on `switch2` — so the file prints only `switch1`. Fabric A's
-config was rebuilt from API reads, which list every object, so it records
-`switch2` explicitly. There is no hardware or forwarding asymmetry; only
-the export format differs.
+Atheros 8227 (`ether1`/mgmt only). A RouterOS `/export` omits default
+values, and `qos-hw-offloading=no` is the default on `switch2` — so an
+export prints only `switch1`. API reads list every object and record
+`switch2` explicitly. There is no hardware or forwarding asymmetry.
 
-### 3.5.1 Minimal Fabric B convergence
+### 3.5.1 Minimal QoS profile
 
-Fabric B now runs the same minimal set as Fabric A: both DSCP/traffic-class
-profiles, `pfc-tc3`, `trust-l3=keep`, `egress-rate-queue3`, `l2mtu=9014`,
-and QoS offload on `switch1`; PFC thresholds and PCP marks are left at
-defaults. It was converged manually on 2026-11-04; A's L3 MTU was raised to
-9000 in the same pass so the two units match. Nothing re-applies these
-settings automatically — `asteria-down.sh` only updates RouterOS and powers
-off; it does not import or validate switch config.
-
-- PCP marking is 0 on both profiles (these links are untagged).
-- PFC pause/resume thresholds are `auto`.
-- Data ports use `trust-l3=keep` so the host's DSCP is preserved.
-
-`configs/switch-fabric-b-minimal.rsc` is a targeted delta, not a full
-export; run it by hand only with the model stopped.
-`configs/switch-fabric-b-rollback.rsc` reverses it. RouterOS applies and
-persists the change immediately — no reboot or startup-config upload is
-involved.
+The load-bearing set is small: both DSCP/traffic-class profiles, `pfc-tc3`,
+`trust-l3=keep`, `egress-rate-queue3`, `l2mtu=9014`, and QoS offload on
+`switch1`. Leave PCP marks, PFC thresholds, buffer allocation and queue
+scheduling at their defaults. The two live units run exactly this set.
 
 ### 3.6 Applying to a fresh unit
 1. Reset to RouterOS (not SwOS), set admin password, enable SSH.
@@ -309,10 +282,8 @@ ssh vesta 'ib_write_bw -d roceP2p1s0f1 --duration=15 --report_gbits 10.0.1.1'
 
 ## 7. Files
 
-- `configs/switch-fabric-b.rsc` — pre-convergence RouterOS export (historical)
+- `configs/switch-fabric-b.rsc` — full RouterOS export
 - `configs/switch-fabric-a.rsc` — Fabric A's live config (API reads, minimal set)
-- `configs/switch-fabric-b-minimal.rsc` — minimal-QoS delta (applied manually; not run by asteria-down)
-- `configs/switch-fabric-b-rollback.rsc` — reverses the minimal-QoS delta
 - `configs/netplan-40-cx7.yaml` — netplan snippet (ceres addresses)
 - `configs/99-roce-unused.conf` — NetworkManager unmanaged list
 - `configs/roce-qos.service` / `configs/roce-qos.sh` — QoS systemd unit+script
