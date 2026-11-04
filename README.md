@@ -259,6 +259,11 @@ exit 0
 ```
 (systemd: `systemctl daemon-reload && systemctl enable --now roce-qos`)
 
+These links are untagged, so there is no PCP field on the wire and no PCP
+marking is configured on the hosts. `--pfc` selects the PFC priority;
+DSCP 26 is what maps into it, so keep the DSCP trust and `dscp2prio`
+mapping. PCP only matters if the egress frame carries an 802.1Q tag.
+
 This mirrors the switch: DSCP26→priority 3, PFC priority 3, trust DSCP.
 
 ## 5. Validation (numbers measured on this rig)
