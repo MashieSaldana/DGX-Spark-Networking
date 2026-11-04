@@ -156,6 +156,24 @@ config was rebuilt from API reads, which list every object, so it records
 `switch2` explicitly. There is no hardware or forwarding asymmetry; only
 the export format differs.
 
+### 3.5.1 Minimal Fabric B convergence
+
+Fabric A already runs the minimum load-bearing set: both DSCP/traffic-class
+profiles, `pfc-tc3`, `trust-l3=keep`, `egress-rate-queue3`, `l2mtu=9014`,
+and QoS offload on `switch1`; PFC thresholds and PCP marks are left at
+defaults. Fabric B will be reduced to the same set by the next down run:
+
+- PCP marking returns to 0 on both profiles (these links are untagged).
+- PFC pause/resume thresholds return to `auto`.
+- Data ports will use `trust-l3=keep` so the host's DSCP is preserved.
+
+`configs/switch-fabric-b-minimal.rsc` is a targeted delta, not a full
+export. `asteria-down.sh` phase 4b imports it after sparkrun has stopped
+and the API endpoints are confirmed dark;
+`configs/switch-fabric-b-rollback.rsc` reverses it. RouterOS applies and
+persists the change immediately — no reboot or startup-config upload is
+involved.
+
 ### 3.6 Applying to a fresh unit
 1. Reset to RouterOS (not SwOS), set admin password, enable SSH.
 2. Copy `configs/switch-fabric-b.rsc`, edit the mgmt IP block to your LAN.
@@ -282,6 +300,8 @@ ssh vesta 'ib_write_bw -d roceP2p1s0f1 --duration=15 --report_gbits 10.0.1.1'
 
 - `configs/switch-fabric-b.rsc` — full RouterOS export, verbatim (canonical)
 - `configs/switch-fabric-a.rsc` — Fabric A's live config (API reads), slight deltas
+- `configs/switch-fabric-b-minimal.rsc` — targeted minimal-QoS delta for Fabric B
+- `configs/switch-fabric-b-rollback.rsc` — reverses the minimal-QoS delta
 - `configs/netplan-40-cx7.yaml` — netplan snippet (ceres addresses)
 - `configs/99-roce-unused.conf` — NetworkManager unmanaged list
 - `configs/roce-qos.service` / `configs/roce-qos.sh` — QoS systemd unit+script
