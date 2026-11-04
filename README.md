@@ -94,7 +94,10 @@ add bridge=bridge-roce comment=roce interface=qsfp28-4-1
 /interface ethernet switch
 set switch1 qos-hw-offloading=yes
 ```
-The CRS504-4XQ is single-chip; `switch1` covers all 4 data ports.
+All four 100G QSFP28 ports (16 lanes) sit on `switch1`, the Marvell
+98DX4310. The board also carries a second, small switch chip — `switch2`,
+an Atheros 8227 — used only for `ether1`/management. The data plane is
+single-chip; the board as a whole is not.
 9000 MTU / 9014 L2MTU matches the hosts (Jumbo frames for IB/RoCE).
 
 ### 3.3 Lossless RoCEv2 QoS (PFC + DSCP maps)
@@ -130,7 +133,7 @@ i.e.:
 ```
 
 ### 3.5 Applying to a fresh unit + the two live units' differences
-Our two units (A @ 192.168.1.9; B @ 192.168.1.10 are wired identically and
+Our two units (A @ 192.168.1.9; B @ 192.168.1.10) are wired identically and
 forward identically. B is the canonical config in this repo
 (`configs/switch-fabric-b.rsc` is a verbatim RouterOS export). A differs
 only in these details (full file in `configs/switch-fabric-a.rsc`, built
@@ -142,10 +145,16 @@ from live API reads):
 | QoS port trust           | keep                    | trust (L3)                | none — hosts set DSCP 26 themselves; both honor the map |
 | profile PCP marking      | pcp=0 (roce/cnp)        | pcp=3/6 (roce-lossless/cnp)| egress 802.1p PCP bits differ; hosts trust DSCP |
 | PFC thresholds           | auto                    | 90%/70%                   | auto is fine at this scale |
-| qos-hw-offloading        | switch1=on, switch2=off| switch1=on                | same data path (all 100G ports on switch1) |
+| qos-hw-offloading        | switch1=on, switch2=off | switch1=on, switch2=off   | same data path (all 100G ports on switch1) |
 
-Level detail: all QSFP28 (100G) ports live on switch1; ether1/mgmt and
-the mgmt bridge live on switch2 — only switch1 needs qos-hw-offloading.
+Both units are the same hardware and both expose two switch chips:
+`switch1` = Marvell 98DX4310 (all QSFP28 data ports) and `switch2` =
+Atheros 8227 (`ether1`/mgmt only). Fabric B's `.rsc` is a RouterOS
+`/export`, which omits default values, and `qos-hw-offloading=no` is the
+default on `switch2` — so the file prints only `switch1`. Fabric A's
+config was rebuilt from API reads, which list every object, so it records
+`switch2` explicitly. There is no hardware or forwarding asymmetry; only
+the export format differs.
 
 ### 3.6 Applying to a fresh unit
 1. Reset to RouterOS (not SwOS), set admin password, enable SSH.
